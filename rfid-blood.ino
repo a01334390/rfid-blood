@@ -1,9 +1,12 @@
 // Required Libraries
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
+#include <ESP8266WebServer.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <MFRC522.h>
+
 
 /* ----------------------------------
                MFRC522      Node
@@ -22,10 +25,10 @@
 #define RST_PIN 5
 #define SS_PIN 4
 #define BUZZER 15
-#define ESTETUINO
+#define LOCATION 115
 
 // Global Variables
-int mode = 1;
+int mode = 2;
 int hasBuzzed = 1;
 int hasSent = 1;
 const char *ssid = "BunkerDeBlacky";
@@ -33,6 +36,11 @@ const char *pass = "FE80BLACKY";
 WiFiClient client;
 MFRC522 rfid(SS_PIN, RST_PIN); // Instance of the class
 MFRC522::MIFARE_Key key;
+ESP8266WebServer server(80);
+const char fingerprint[] PROGMEM = "D5 B6 6B A5 95 5B 44 4E A9 80 98 CA 9C A8 69 CE 2A 41 2C 47";
+const int port = 443;
+const char *host = "api.rightdonor.org/prod/";
+
 byte nuidPICC[4];
 String bloodbag = "";
 
@@ -61,6 +69,10 @@ void setup_wifi() {
   Serial.print(WiFi.localIP());
   Serial.print("\n");
   buzz(1);
+  server.on("/", handle_onConnect);
+  server.onNotFound(handle_onNotFound);
+  server.begin();
+  Serial.println("==== HTTP Server began ====");
   delay(1000);
 }
 
@@ -72,6 +84,14 @@ void setup() {
   //Wireless initialization
   setup_wifi();
   setup_rfid();
+}
+
+void handle_onConnect() {
+  server.send(200, "text/html", bloodbag_read());
+}
+
+void handle_onNotFound() {
+  server.send(404, "text/plain", "Not Found");
 }
 
 /**
@@ -86,6 +106,24 @@ void buzz(int m) {
   }
 }
 
+void confirmation_buzz(int res) {
+  if (res) {
+    tone(BUZZER, 500);
+    delay(200);
+    tone(BUZZER, 1000);
+    delay(100);
+    noTone(BUZZER);
+    delay(200);
+  } else {
+    tone(BUZZER, 1000);
+    delay(100);
+    tone(BUZZER, 500);
+    delay(100);
+    noTone(BUZZER);
+    delay(200);
+  }
+}
+
 void loop() {
   // Buzz for mode
   if (!--hasBuzzed) {
@@ -94,37 +132,26 @@ void loop() {
 
   switch (mode) {
     case 1:
+      server.handleClient();
       rfid_read();
       break;
     case 2:
+      rfid_read();
       break;
   }
+}
 
-  //  if(WiFi.status() == WL_CONNECTED && !--hasSent){
-  //    HTTPClient http;
-  //    http.begin("http://192.168.0.5:3000/hello");
-  //    http.addHeader("Content-Type","application/json");
-  //    //
-  //    StaticJsonBuffer<300> JSONbuffer;   //Declaring static JSON buffer
-  //    JsonObject& JSONencoder = JSONbuffer.createObject();
-  //
-  //    JSONencoder["sensorType"] = "Temperature";
-  //
-  //    JsonArray& values = JSONencoder.createNestedArray("values"); //JSON array
-  //    values.add(20); //Add value to array
-  //    values.add(21); //Add value to array
-  //    values.add(23); //Add value to array
-  //    char JSONmessageBuffer[300];
-  //    JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
-  //    Serial.println(JSONmessageBuffer);
-  //    //
-  //    int httpCode = http.POST(JSONmessageBuffer);
-  //    String payload = http.getString();
-  //    Serial.println(httpCode);   //Print HTTP return code
-  //    Serial.println(payload);    //Print request response payload
-  //
-  //    http.end();  //Close connection
-  //  }
+void checkpoint_send() {
+  if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        String postcode = "http://3.222.166.83/blood/move/"+bloodbag+"/"+LOCATION+"/user1";
+        http.begin(postcode);
+        int httpCode = http.POST("");
+        String payload = http.getString();
+        Serial.println(httpCode);
+        Serial.println(payload);
+        http.end();
+  }
 }
 
 void rfid_read() {
@@ -145,6 +172,7 @@ void rfid_read() {
       piccType != MFRC522::PICC_TYPE_MIFARE_1K &&
       piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
     Serial.println(F("Your tag is not of type MIFARE Classic."));
+    confirmation_buzz(0);
     return;
   }
 
@@ -160,9 +188,15 @@ void rfid_read() {
     }
 
     decode_id(rfid.uid.uidByte, rfid.uid.size);
-    Serial.println("Card ID: "+bloodbag);
+    Serial.println("Card ID: " + bloodbag);
+    confirmation_buzz(1);
+    if (mode == 2) {
+      checkpoint_send();
+    }
+  } else {
+    Serial.println(F("Card read previously."));
+    confirmation_buzz(0);
   }
-  else Serial.println(F("Card read previously."));
   // Halt PICC
   rfid.PICC_HaltA();
   // Stop encryption on PCD
@@ -184,8 +218,31 @@ void printHex(byte *buffer, byte bufferSize) {
    Helper routine to dump a byte array as dec values to Serial.
 */
 void decode_id(byte *buffer, byte bufferSize) {
+  bloodbag = "";
   for (byte i = 0; i < bufferSize; i++) {
-    bloodbag+=buffer[i] < 0x10 ? " 0" : " ";
-    bloodbag+=buffer[i];
+    if (i == 0) {
+      bloodbag += "";
+    } else {
+      bloodbag += buffer[i] < 0x10 ? " 0" : "-";
+    }
+    bloodbag += buffer[i];
   }
+}
+
+String bloodbag_read() {
+  String ptr = "<!DOCTYPE html>\n";
+  ptr += "<html>\n";
+  ptr += "<head>\n";
+  ptr += "<title> Right Donor's RFID Prototype </title>\n";
+  ptr += "</head>\n";
+  ptr += "<body>\n";
+  ptr += "<h1>Blood Bag ID</h1>\n";
+  if (bloodbag != "")
+    ptr += "<h4>The Blood Bag ID is: " + bloodbag + "</h4>";
+  else
+    ptr += "<h4> Put a new tag on the reader <h4>";
+  ptr += "<p><a href=\"/\"><button class=\"button\">Reload</button></a></p>";
+  ptr += "</body>\n";
+  ptr += "</html>\n";
+  return ptr;
 }
