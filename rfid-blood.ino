@@ -1,13 +1,20 @@
+/**
+      __    _____    _   __  __ _ __
+    / / _ /_  _/   / \,' /,'_//// /
+   / /,'o| / /___ / \,' // /_/ U /
+   /_/ |_,'/_//__//_/ /_/ |__/\_,'
+   Made by: Fernando Martin Garcia Del Ange
+   Built on: September 13th, 2019
+*/
+
 // Required Libraries
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
-#include <WiFiClientSecure.h>
-#include <ArduinoJson.h>
 #include <SPI.h>
 #include <MFRC522.h>
-
-
+#include <Adafruit_GFX.h>
+#include "Max72xxPanel.h"
 /* ----------------------------------
                MFRC522      Node
                Reader/PCD   MCU
@@ -28,22 +35,24 @@
 #define LOCATION 115
 
 // Global Variables
-int mode = 2;
+int mode = 1;
 int hasBuzzed = 1;
 int hasSent = 1;
+// Internet Variables
 const char *ssid = "BunkerDeBlacky";
 const char *pass = "FE80BLACKY";
 WiFiClient client;
+ESP8266WebServer server(80);
+//RFID Variables
 MFRC522 rfid(SS_PIN, RST_PIN); // Instance of the class
 MFRC522::MIFARE_Key key;
-ESP8266WebServer server(80);
-const char fingerprint[] PROGMEM = "D5 B6 6B A5 95 5B 44 4E A9 80 98 CA 9C A8 69 CE 2A 41 2C 47";
-const int port = 443;
-const char *host = "api.rightdonor.org/prod/";
-
 byte nuidPICC[4];
+//Blood Bag PICC ID
 String bloodbag = "";
 
+/**
+   Starts up the RFID Scanner
+*/
 void setup_rfid() {
   SPI.begin();
   rfid.PCD_Init();
@@ -55,6 +64,9 @@ void setup_rfid() {
   printHex(key.keyByte, MFRC522::MF_KEY_SIZE);
 }
 
+/**
+   Connects to WiFi and Creates a Client on port 80
+*/
 void setup_wifi() {
   Serial.println("Conecting to: ");
   Serial.print(ssid);
@@ -76,6 +88,9 @@ void setup_wifi() {
   delay(1000);
 }
 
+/**
+   Setup procedure
+*/
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
@@ -86,10 +101,16 @@ void setup() {
   setup_rfid();
 }
 
+/**
+   Serves / path
+*/
 void handle_onConnect() {
   server.send(200, "text/html", bloodbag_read());
 }
 
+/**
+   Serves any other path
+*/
 void handle_onNotFound() {
   server.send(404, "text/plain", "Not Found");
 }
@@ -106,6 +127,10 @@ void buzz(int m) {
   }
 }
 
+/**
+   Helper routine to make the buzzer make a confirmation or error sound
+   1 => OK, 0 => NOT OK
+*/
 void confirmation_buzz(int res) {
   if (res) {
     tone(BUZZER, 500);
@@ -124,12 +149,16 @@ void confirmation_buzz(int res) {
   }
 }
 
+/**
+   Main Program Loop
+*/
 void loop() {
   // Buzz for mode
   if (!--hasBuzzed) {
     buzz(mode);
   }
 
+  //Main Switch
   switch (mode) {
     case 1:
       server.handleClient();
@@ -141,19 +170,25 @@ void loop() {
   }
 }
 
+/**
+   POSTs to the Blockchain Server
+*/
 void checkpoint_send() {
   if (WiFi.status() == WL_CONNECTED) {
-        HTTPClient http;
-        String postcode = "http://3.222.166.83/blood/move/"+bloodbag+"/"+LOCATION+"/user1";
-        http.begin(postcode);
-        int httpCode = http.POST("");
-        String payload = http.getString();
-        Serial.println(httpCode);
-        Serial.println(payload);
-        http.end();
+    HTTPClient http;
+    String postcode = "http://3.222.166.83/blood/move/" + bloodbag + "/" + LOCATION + "/user1";
+    http.begin(postcode);
+    int httpCode = http.POST("");
+    String payload = http.getString();
+    Serial.println(httpCode);
+    Serial.println(payload);
+    http.end();
   }
 }
 
+/**
+   Reads the ID from the MiFare Tag
+*/
 void rfid_read() {
   // Look for new cards
   if ( ! rfid.PICC_IsNewCardPresent())
@@ -229,6 +264,9 @@ void decode_id(byte *buffer, byte bufferSize) {
   }
 }
 
+/**
+   Returns the webpage to serve to the server
+*/
 String bloodbag_read() {
   String ptr = "<!DOCTYPE html>\n";
   ptr += "<html>\n";
