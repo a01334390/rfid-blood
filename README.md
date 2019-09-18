@@ -60,38 +60,25 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://www.rightdonor.org)
 
-There are many great README templates available on GitHub, however, I didn't find one that really suit my needs so I created this enhanced one. I want to create a README template so amazing that it'll be the last one you ever need.
+Este es uno de los multiples proyectos que forman parte de Right Donor. La utilidad de este proyecto es la de:
+* Permitirle a los medicos obtener el ID de un Tag de una bolsa de sangre.
+* Permitirle a los transportistas llevar un control del sitio donde se encuentra una bolsa de sangre.
 
-Here's why:
-* Your time should be focused on creating something amazing. A project that solves a problem and helps others
-* You shouldn't be doing the same tasks over and over like creating a README from scratch
-* You should element DRY principles to the rest of your life :smile:
 
-Of course, no one template will serve all projects since your needs may be different. So I'll be adding more in the near future. You may also suggest changes by forking this repo and creating a pull request or opening an issue with the tag.
+### Construido con:
+Este proyecto fue realizado usando los siguientes componentes:
 
-A list of commonly used resources that I find helpful are listed in the acknowledgements.
-
-### Built With
-This section should list any major frameworks that you built your project using. Leave any add-ons/plugins for the acknowledgements section. Here are a few examples.
-* [Bootstrap](https://getbootstrap.com)
-* [JQuery](https://jquery.com)
-* [Laravel](https://laravel.com)
-
+* [NodeMCU v1.0](https://www.nodemcu.com/index_cn.html)
+* [Buzzer 12mm](https://www.steren.com.mx/mini-buzzer-de-4-khz-de-1-5-a-16-vcc-con-se-al-de-tono-constante-de-72-db.html)
+* [RC522](https://randomnerdtutorials.com/security-access-using-mfrc522-rfid-reader-with-arduino/)
 
 
 <!-- GETTING STARTED -->
-## Getting Started
-
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
+## Empezar
 
 ### Prerequisites
 
-This is an example of how to list things you need to use the software and how to install them.
-* npm
-```sh
-npm install npm@latest -g
-```
+Obtener todos los componentes presentados anteriormente.
 
 ### Instalación
 
@@ -101,8 +88,13 @@ git clone https:://github.com/right-donor/rfid-blood.git
 ```
 2. Abre Arduino IDE
 3. Sigue los pasos contenidos en [la siguiente liga](https://www.teachmemicro.com/intro-nodemcu-arduino) para usar NodeMCU.
-4. Realiza la conexi
-
+4. Realiza la conexión de los componentes como aparece en el diagrama principal.
+5. Modifica el apartado de SSID y Password para conectarse a la red que tu desees
+```c++ 
+const char *ssid = "XXXXXXXX";
+const char *pass = "XXXXXXXX";
+```
+6. Presiona CMD+R en MacOS o CTRL+R en Windows/Linux
 
 <!-- USAGE EXAMPLES -->
 ## Uso
