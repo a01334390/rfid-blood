@@ -103,6 +103,7 @@ void setup_lcd(){
   lcd.print("Right Donor v1.0");
   lcd.setCursor(0,1);
   lcd.print("IoT Tracker");
+  rightdonor_chime();
   delay(5000);
 }
 
@@ -115,6 +116,8 @@ void setup() {
   Serial.begin(115200);
   // Component Initialization
   pinMode(BUZZER, OUTPUT);
+  // Flash Button change
+  pinMode(0,INPUT_PULLUP);
   //Wireless initialization
   setup_wifi();
   setup_rfid();
@@ -168,6 +171,22 @@ void confirmation_buzz(int res) {
   }
 }
 
+/*
+ * Right Donor's Chime
+ */
+void rightdonor_chime(){
+  tone(BUZZER,500);
+  delay(200);
+  tone(BUZZER,300);
+  delay(200);
+  tone(BUZZER,400);
+  delay(200);
+  tone(BUZZER,800);
+  delay(200);
+  noTone(BUZZER);
+  delay(200);
+}
+
 /**
    Main Program Loop
 */
@@ -189,6 +208,23 @@ void loop() {
       lcd.print("Scan RFID Tag");
       break;
     }
+  }
+
+  if(digitalRead(0) == 0) {
+    confirmation_buzz(1);
+    if(mode == 1){
+      mode = mode + 1;
+    } else {
+      mode = mode - 1;
+    }
+    
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("Mode changed!");
+    lcd.setCursor(0,1);
+    lcd.print(mode);
+    hasBuzzed=1;
+    delay(6000);
   }
 
   //Main Switch
