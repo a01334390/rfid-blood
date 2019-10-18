@@ -8,13 +8,15 @@
 */
 
 // Required Libraries
+#include <Wire.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <Adafruit_GFX.h>
-#include "Max72xxPanel.h"
+#include <LiquidCrystal_I2C.h>
+
+
 /* ----------------------------------
                MFRC522      Node
                Reader/PCD   MCU
@@ -49,6 +51,7 @@ MFRC522::MIFARE_Key key;
 byte nuidPICC[4];
 //Blood Bag PICC ID
 String bloodbag = "";
+LiquidCrystal_I2C lcd(0x27,16,2);
 
 /**
    Starts up the RFID Scanner
@@ -59,39 +62,55 @@ void setup_rfid() {
   for (byte i = 0; i < 6; i++) {
     key.keyByte[i] = 0xFF;
   }
-  Serial.println(F("=== RFID Scanner is ready ===="));
-  Serial.print(F("Using the following key:"));
-  printHex(key.keyByte, MFRC522::MF_KEY_SIZE);
+  lcd.setCursor(0,1);
+  lcd.print("RFID: Online!");
+  delay(2000);
 }
 
 /**
    Connects to WiFi and Creates a Client on port 80
 */
 void setup_wifi() {
-  Serial.println("Conecting to: ");
-  Serial.print(ssid);
-  Serial.print("\n");
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Conn. to WiFi");
+  int curs = 0;
   WiFi.begin(ssid, pass);
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    delay(300);
+    lcd.setCursor(curs,1);
+    lcd.print(".");
+    curs++;
   }
-  Serial.println("\n==== WiFi Connected! ====");
-  Serial.println("IP Address:");
-  Serial.print(WiFi.localIP());
-  Serial.print("\n");
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("WiFi: Connected!");
   buzz(1);
   server.on("/", handle_onConnect);
   server.onNotFound(handle_onNotFound);
   server.begin();
-  Serial.println("==== HTTP Server began ====");
-  delay(1000);
+  delay(2000);
+}
+
+/**
+ * Sets up the LCD and Shows a simple message
+ */
+void setup_lcd(){
+  Wire.begin(D3,D4);
+  lcd.begin();
+  lcd.home();
+  lcd.setCursor(0,0);
+  lcd.print("Right Donor v1.0");
+  lcd.setCursor(0,1);
+  lcd.print("IoT Tracker");
+  delay(5000);
 }
 
 /**
    Setup procedure
 */
 void setup() {
+  setup_lcd();
   // put your setup code here, to run once:
   Serial.begin(115200);
   // Component Initialization
@@ -155,7 +174,21 @@ void confirmation_buzz(int res) {
 void loop() {
   // Buzz for mode
   if (!--hasBuzzed) {
+    lcd.clear();
+    lcd.setCursor(0,0);
     buzz(mode);
+    switch(mode){
+      case 1:
+      lcd.print(WiFi.localIP());
+      lcd.setCursor(0,1);
+      lcd.print("Scan RFID Tag");
+      break;
+      case 2:
+      lcd.print("Blood checkpoint");
+      lcd.setCursor(0,1);
+      lcd.print("Scan RFID Tag");
+      break;
+    }
   }
 
   //Main Switch
@@ -180,10 +213,29 @@ void checkpoint_send() {
     http.begin(postcode);
     int httpCode = http.POST("");
     String payload = http.getString();
+    if(httpCode == 200){
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("Success!");
+      lcd.setCursor(0,1);
+      lcd.print("Checkpoint added!");
+    } else {
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("Warning!");
+      lcd.setCursor(0,1);
+      lcd.print("Try again!");
+    }
     Serial.println(httpCode);
     Serial.println(payload);
     http.end();
   }
+  delay(3000);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Blood checkpoint");
+  lcd.setCursor(0,1);
+  lcd.print("Scan RFID Tag");
 }
 
 /**
@@ -206,9 +258,13 @@ void rfid_read() {
   if (piccType != MFRC522::PICC_TYPE_MIFARE_MINI &&
       piccType != MFRC522::PICC_TYPE_MIFARE_1K &&
       piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
-    Serial.println(F("Your tag is not of type MIFARE Classic."));
-    confirmation_buzz(0);
-    return;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print("Warning!");
+      lcd.setCursor(0,1);
+      lcd.print("Invalid Tag read");
+      confirmation_buzz(0);
+      return;
   }
 
   if (rfid.uid.uidByte[0] != nuidPICC[0] ||
@@ -223,20 +279,31 @@ void rfid_read() {
     }
 
     decode_id(rfid.uid.uidByte, rfid.uid.size);
-    Serial.println("Card ID: " + bloodbag);
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("Read new tag!");
+    lcd.setCursor(0,1);
+    lcd.print(bloodbag);
     confirmation_buzz(1);
     if (mode == 2) {
       checkpoint_send();
     }
   } else {
-    Serial.println(F("Card read previously."));
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("Warning!");
+    lcd.setCursor(0,1);
+    lcd.print("Tag read before");
     confirmation_buzz(0);
   }
   // Halt PICC
   rfid.PICC_HaltA();
   // Stop encryption on PCD
   rfid.PCD_StopCrypto1();
-
+  delay(10000);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Scan RFID Tag");
 }
 
 /**
@@ -268,19 +335,10 @@ void decode_id(byte *buffer, byte bufferSize) {
    Returns the webpage to serve to the server
 */
 String bloodbag_read() {
-  String ptr = "<!DOCTYPE html>\n";
-  ptr += "<html>\n";
-  ptr += "<head>\n";
-  ptr += "<title> Right Donor's RFID Prototype </title>\n";
-  ptr += "</head>\n";
-  ptr += "<body>\n";
-  ptr += "<h1>Blood Bag ID</h1>\n";
+  String ptr = "<html><head><title>Right Donor</title><link href=\"https://fonts.googleapis.com/css?family=Source+Sans+Pro&display=swap\" rel=\"stylesheet\"><style>body { background-color: black; text-align: center; color: white; font-family: Source Sans Pro, sans-serif;}div { position: fixed; top: 40%; left: 50%; /* bring your own prefixes */ transform: translate(-50%, -50%);}h1 {font-size: 6rem;}p {margin-top: 0px;}.button { background-color: #e7e7e7; color: black; border: none; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px;}.button { -webkit-transition-duration: 0.4s; /* Safari */ transition-duration: 0.4s;}.button:hover { background-color: white; /* Green */ color: black;}</style></head><body><div><h1>Right Donor</h1><p>RFID Scanner Server</p>";
   if (bloodbag != "")
-    ptr += "<h4>The Blood Bag ID is: " + bloodbag + "</h4>";
+    ptr += "<p>Tag ID: <b>"+bloodbag+"</b></p><a href=\"/\"><button class=\"button\">Reload</button></a></div></body></html>";
   else
-    ptr += "<h4> Put a new tag on the reader <h4>";
-  ptr += "<p><a href=\"/\"><button class=\"button\">Reload</button></a></p>";
-  ptr += "</body>\n";
-  ptr += "</html>\n";
+    ptr += "<p><b>Put a new tag on the reader</b></p><a href=\"/\"><button class=\"button\">Reload</button></a></div></body></html>";
   return ptr;
 }
